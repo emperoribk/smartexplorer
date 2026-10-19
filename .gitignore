@@ -1,0 +1,45 @@
+# Publish only the app itself. Everything else that happens to live in this
+# folder (personal screenshots, test photos, scratch output) stays local.
+/*
+!/.gitignore
+!/LICENSE
+!/README.md
+!/build-installer.ps1
+!/docs/
+!/electron-app/
+!/python-backend/
+
+# Stray files from local tooling
+python-backend/=*
+*.log
+.ui_preview/
+**/.ui_preview/
+.env
+.env.*
+*.pem
+*.key
+
+node_modules/
+.venv/
+dist/
+dist-electron/
+dist_electron/
+__pycache__/
+*.pyc
+.smartsearch/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.DS_Store
+
+# Build ingredients that go INTO the installer but must never be committed
+# (the Python runtime is ~GBs, the CLIP model ~350 MB, Tesseract ~100 MB).
+# build-installer.ps1 recreates all of them.
+python-backend/runtime/
+python-backend/tesseract/
+python-backend/models/
+.build-state/
+
+# Microsoft's Visual C++ redistributable, downloaded by build-installer.ps1
+electron-app/build/vc_redist.x64.exe

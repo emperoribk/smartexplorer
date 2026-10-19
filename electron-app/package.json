@@ -1,0 +1,88 @@
+{
+  "name": "smartsearch",
+  "version": "0.1.0",
+  "description": "SmartExplorer: a smarter file explorer that searches inside documents and images by meaning, and hover-previews videos.",
+  "author": "SmartExplorer contributors",
+  "main": "dist-electron/main/main.js",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build:renderer": "tsc -p tsconfig.json && vite build",
+    "build:electron": "tsc -p tsconfig.node.json",
+    "build": "npm run build:renderer && npm run build:electron",
+    "start": "npm run build && electron .",
+    "electron:dev": "npm run build:electron && concurrently -k \"vite\" \"wait-on tcp:5183 && electron .\"",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac"
+  },
+  "devDependencies": {
+    "@types/archiver": "^5.3.4",
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "concurrently": "^8.2.2",
+    "electron": "^32.0.1",
+    "electron-builder": "^24.13.3",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.2",
+    "wait-on": "^7.2.0"
+  },
+  "dependencies": {
+    "archiver": "^5.3.2",
+    "extract-zip": "^2.0.1",
+    "ffmpeg-static": "^5.3.0",
+    "pdfjs-dist": "^6.3.289",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "build": {
+    "appId": "com.smartexplorer.app",
+    "productName": "SmartExplorer",
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "node_modules/ffmpeg-static/**/*"
+    ],
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../python-backend",
+        "to": "python-backend",
+        "filter": [
+          "**/*",
+          "!.venv/**",
+          "!.smartsearch/**",
+          "!tests/**",
+          "!**/__pycache__/**",
+          "!**/*.pyc",
+          "!build-runtime.ps1"
+        ]
+      },
+      {
+        "from": "build/vc_redist.x64.exe",
+        "to": "vc_redist.x64.exe"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "signAndEditExecutable": false
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "directories": {
+      "output": "dist_electron"
+    },
+    "artifactName": "SmartExplorer-Setup-${version}.${ext}",
+    "compression": "maximum",
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "include": "build/installer.nsh",
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}

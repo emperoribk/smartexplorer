@@ -1,0 +1,18 @@
+# Minimum versions rather than exact pins: exact pins on torch/numpy break on
+# newer Python releases (e.g. torch==2.4.1 has no wheel for Python 3.13+),
+# and this app should keep working as users' Python installs move forward.
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pytesseract>=0.3.13
+Pillow>=10.4
+open-clip-torch>=2.26
+torch>=2.4
+numpy>=1.26,<3
+pypdf>=4.3
+pymupdf>=1.24
+python-docx>=1.1
+watchdog>=4.0
+pdf2docx>=0.5
+img2pdf>=0.5
+openpyxl>=3.1
+cryptography>=43.0  # AES-256-GCM + the AEAD primitives vault.py uses for "Your Eyes Only" - deliberately the PyCA library (audited, the standard choice) rather than hand-rolled crypto
