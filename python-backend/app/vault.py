@@ -291,11 +291,17 @@ def _aesgcm_unwrap(key: bytes, nonce: bytes, ct: bytes) -> bytes:
 # --- Setup ------------------------------------------------------------------
 
 
+# Your Eyes Only PINs are exactly this many digits (the UI shows one box per
+# digit). Only enforced when a PIN is CHOSEN; unlocking an older vault whose
+# PIN was made under the previous "4 or more" rule still works.
+PIN_LENGTH = 5
+
+
 def setup_with_pin(pin: str) -> None:
     if is_set_up():
         raise VaultError("The vault is already set up.")
-    if len(pin) < 4:
-        raise VaultError("Choose a PIN of at least 4 digits.")
+    if not (len(pin) == PIN_LENGTH and pin.isascii() and pin.isdigit()):
+        raise VaultError(f"Choose a PIN of exactly {PIN_LENGTH} digits.")
     vault_key = os.urandom(VAULT_KEY_BYTES)
     salt = os.urandom(_SCRYPT_SALT_BYTES)
     wrap_key = _scrypt_key(pin, salt)

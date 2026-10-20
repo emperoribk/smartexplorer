@@ -49,6 +49,103 @@ type CredentialAction =
   | { kind: "open"; entry: VaultEntry }
   | { kind: "restore"; entry: VaultEntry };
 
+export const PIN_LENGTH = 5;
+
+/** Five one-digit boxes for a PIN. Digits only; typing moves to the next
+ *  box, Backspace steps back, pasting fills them all. The value is always
+ *  a contiguous string (no gaps), so focus is kept on the first empty box. */
+export function PinBoxes({
+  value,
+  onChange,
+  onEnter,
+  onEscape,
+  autoFocus,
+  label,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  onEnter?: () => void;
+  onEscape?: () => void;
+  autoFocus?: boolean;
+  label: string;
+}) {
+  const refs = useRef<Array<HTMLInputElement | null>>([]);
+
+  useEffect(() => {
+    if (autoFocus) refs.current[0]?.focus();
+  }, [autoFocus]);
+
+  const focusBox = (i: number) => {
+    const el = refs.current[Math.max(0, Math.min(PIN_LENGTH - 1, i))];
+    el?.focus();
+    el?.select();
+  };
+
+  return (
+    <div className="pin-boxes" role="group" aria-label={label}>
+      {Array.from({ length: PIN_LENGTH }, (_, i) => (
+        <input
+          key={i}
+          ref={(el) => {
+            refs.current[i] = el;
+          }}
+          type="password"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          maxLength={1}
+          autoComplete="off"
+          className={`pin-box${value[i] ? " pin-box-filled" : ""}`}
+          aria-label={`${label}, digit ${i + 1} of ${PIN_LENGTH}`}
+          value={value[i] ?? ""}
+          onFocus={(e) => {
+            // Never let focus land past the first empty box.
+            if (i > value.length) focusBox(value.length);
+            else e.currentTarget.select();
+          }}
+          onChange={(e) => {
+            const digits = e.target.value.replace(/\D/g, "");
+            if (!digits) return;
+            const digit = digits[digits.length - 1];
+            const next = (value.slice(0, i) + digit + value.slice(i + 1)).slice(0, PIN_LENGTH);
+            onChange(next);
+            if (i < PIN_LENGTH - 1) focusBox(i + 1);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Backspace") {
+              e.preventDefault();
+              if (value[i]) {
+                onChange(value.slice(0, i) + value.slice(i + 1));
+              } else if (i > 0) {
+                onChange(value.slice(0, i - 1) + value.slice(i));
+                focusBox(i - 1);
+              }
+            } else if (e.key === "ArrowLeft") {
+              e.preventDefault();
+              focusBox(i - 1);
+            } else if (e.key === "ArrowRight") {
+              e.preventDefault();
+              focusBox(Math.min(i + 1, value.length));
+            } else if (e.key === "Enter") {
+              e.preventDefault();
+              onEnter?.();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              onEscape?.();
+            }
+          }}
+          onPaste={(e) => {
+            e.preventDefault();
+            const digits = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, PIN_LENGTH);
+            if (!digits) return;
+            onChange(digits);
+            focusBox(Math.min(digits.length, PIN_LENGTH - 1));
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 /** A focused PIN/password prompt, reused for session-unlock and for the
  *  per-file fresh check that /vault/open and /vault/restore always do
  *  regardless of session state (see vault.py's module docstring on why
@@ -82,10 +179,12 @@ export function CredentialPrompt({
     inputRef.current?.focus();
   }, []);
 
+  const ready = method === "pin" ? value.length === PIN_LENGTH : value.length > 0;
+
   const submit = useCallback(() => {
-    if (!value || submitting) return;
+    if (!ready || submitting) return;
     onSubmit(value);
-  }, [value, submitting, onSubmit]);
+  }, [value, ready, submitting, onSubmit]);
 
   return (
     <div
@@ -103,24 +202,28 @@ export function CredentialPrompt({
             {title}
           </div>
           {detail && <div className="confirm-dialog-detail">{detail}</div>}
-          <input
-            ref={inputRef}
-            type="password"
-            className="vault-prompt-input"
-            placeholder={method === "pin" ? "Your PIN" : "Your Windows password"}
-            value={value}
-            autoComplete="off"
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                submit();
-              } else if (e.key === "Escape") {
-                e.preventDefault();
-                onCancel();
-              }
-            }}
-          />
+          {method === "pin" ? (
+            <PinBoxes value={value} onChange={setValue} onEnter={submit} onEscape={onCancel} autoFocus label="Your PIN" />
+          ) : (
+            <input
+              ref={inputRef}
+              type="password"
+              className="vault-prompt-input"
+              placeholder="Your Windows password"
+              value={value}
+              autoComplete="off"
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  submit();
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  onCancel();
+                }
+              }}
+            />
+          )}
           {error && <div className="vault-prompt-error">{error}</div>}
         </div>
         <div className="confirm-dialog-actions">
@@ -130,7 +233,7 @@ export function CredentialPrompt({
           <button
             type="button"
             className="confirm-dialog-btn confirm-dialog-btn-primary"
-            disabled={!value || submitting}
+            disabled={!ready || submitting}
             onClick={submit}
           >
             {submitting ? "Checking…" : confirmLabel}
@@ -141,13 +244,13 @@ export function CredentialPrompt({
   );
 }
 
-/** First-time setup. Implements exactly the rule the person asked for:
- *  check whether the signed-in Windows account already has a login
- *  password and, if so, just reuse it (method "dpapi" - see
- *  vault.py's dpapi_protect/setup_with_windows_account); if there isn't
- *  one, there's nothing to reuse, so this asks the person to choose a PIN
- *  themselves instead (method "pin"). Never offers a choice between the
- *  two when Windows already answered the question. */
+/** First-time setup. By default: check whether the signed-in Windows
+ *  account already has a login password and, if so, reuse it (method
+ *  "dpapi" - see vault.py's setup_with_windows_account); if there isn't
+ *  one, ask the person to choose a PIN (method "pin"). Because some
+ *  machines have no usable Windows password (Windows Hello PIN only, a
+ *  Microsoft account whose password isn't known, Windows Sandbox, work
+ *  accounts), the password screen also offers "choose a PIN instead". */
 function VaultSetup({
   status,
   onSetUp,
@@ -165,7 +268,8 @@ function VaultSetup({
   // null means "couldn't tell" (e.g. not running on Windows in dev) -
   // treated the same as "no password" so setup can still proceed with a
   // PIN rather than getting stuck.
-  const usesWindowsPassword = status.windows_has_password === true;
+  const [forcePin, setForcePin] = useState(false);
+  const usesWindowsPassword = status.windows_has_password === true && !forcePin;
 
   const submit = async () => {
     setError(null);
@@ -181,8 +285,8 @@ function VaultSetup({
       }
       return;
     }
-    if (pin.length < 4) {
-      setError("Choose a PIN with at least 4 digits.");
+    if (pin.length !== PIN_LENGTH) {
+      setError(`Enter all ${PIN_LENGTH} digits of your PIN.`);
       return;
     }
     if (pin !== pinConfirm) {
@@ -207,14 +311,16 @@ function VaultSetup({
         </div>
         <div className="vault-intro-title">Your Eyes Only</div>
         <p className="vault-intro-text">
-          Files with something sensitive in them - an SSN, a card number, a bank routing number, a
-          private key - get moved here and encrypted, instead of just sitting flagged in the folder.
-          They keep looking like normal files once opened, just encrypted at rest on this machine.
+          A private place for files and folders you choose to lock. Anything you send here is
+          encrypted on this computer, and nothing is moved here automatically. Opening or restoring
+          a file asks for your password or PIN again.
         </p>
         <p className="vault-intro-text">
           {usesWindowsPassword
-            ? "Your Windows account already has a sign-in password, so Your Eyes Only will reuse that - nothing new to remember."
-            : "Your Windows account doesn't have a sign-in password, so you'll choose a short PIN just for Your Eyes Only."}
+            ? "Your Windows account has a sign-in password, so Your Eyes Only will reuse that - nothing new to remember. You can choose a separate 5-digit PIN instead on the next screen."
+            : status.windows_has_password === true
+              ? "You'll choose a 5-digit PIN just for Your Eyes Only."
+              : "Your Windows account doesn't have a sign-in password, so you'll choose a 5-digit PIN just for Your Eyes Only."}
         </p>
         <button type="button" className="vault-primary-btn" onClick={() => setStarted(true)}>
           Set up Your Eyes Only
@@ -229,7 +335,7 @@ function VaultSetup({
         <IconLock size={32} />
       </div>
       <div className="vault-intro-title">
-        {usesWindowsPassword ? "Confirm your Windows password" : "Choose a PIN"}
+        {usesWindowsPassword ? "Confirm your Windows password" : `Choose a ${PIN_LENGTH}-digit PIN`}
       </div>
       {usesWindowsPassword ? (
         <>
@@ -247,35 +353,39 @@ function VaultSetup({
             onChange={(e) => setWindowsPassword(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && submit()}
           />
+          <button
+            type="button"
+            className="vault-link-btn"
+            onClick={() => {
+              setError(null);
+              setForcePin(true);
+            }}
+          >
+            I don't have a Windows password, or I sign in with a PIN - choose a 5-digit PIN instead
+          </button>
         </>
       ) : (
         <>
           <p className="vault-intro-text">
-            Pick something you won't forget, but a stranger picking up this machine wouldn't guess -
-            at least 4 digits. There's no "forgot PIN" recovery by design, so keep it somewhere safe
-            too.
+            Pick a {PIN_LENGTH}-digit PIN you won't forget but a stranger wouldn't guess. There's no
+            "forgot PIN" recovery by design, so keep it somewhere safe too.
           </p>
-          <input
-            type="password"
-            inputMode="numeric"
-            className="vault-prompt-input vault-setup-input"
-            placeholder="Choose a PIN"
-            autoComplete="off"
-            autoFocus
-            value={pin}
-            onChange={(e) => setPin(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && submit()}
-          />
-          <input
-            type="password"
-            inputMode="numeric"
-            className="vault-prompt-input vault-setup-input"
-            placeholder="Confirm PIN"
-            autoComplete="off"
-            value={pinConfirm}
-            onChange={(e) => setPinConfirm(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && submit()}
-          />
+          <div className="pin-label">Enter a {PIN_LENGTH}-digit PIN</div>
+          <PinBoxes value={pin} onChange={setPin} onEnter={submit} autoFocus label={`Choose a ${PIN_LENGTH}-digit PIN`} />
+          <div className="pin-label">Enter it again to confirm</div>
+          <PinBoxes value={pinConfirm} onChange={setPinConfirm} onEnter={submit} label="Confirm PIN" />
+          {forcePin && (
+            <button
+              type="button"
+              className="vault-link-btn"
+              onClick={() => {
+                setError(null);
+                setForcePin(false);
+              }}
+            >
+              Use my Windows password instead
+            </button>
+          )}
         </>
       )}
       {error && <div className="vault-prompt-error">{error}</div>}
@@ -305,6 +415,7 @@ function VaultUnlock({
 
   const submit = async () => {
     if (!value || submitting) return;
+    if (method !== "dpapi" && value.length !== PIN_LENGTH) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -328,23 +439,32 @@ function VaultUnlock({
           ? "Enter your Windows password to see what's in here."
           : "Enter your PIN to see what's in here."}
       </p>
-      <input
-        type="password"
-        className="vault-prompt-input vault-setup-input"
-        placeholder={method === "dpapi" ? "Your Windows password" : "Your PIN"}
-        autoComplete="off"
-        autoFocus
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            submit();
-          }
-        }}
-      />
+      {method === "dpapi" ? (
+        <input
+          type="password"
+          className="vault-prompt-input vault-setup-input"
+          placeholder="Your Windows password"
+          autoComplete="off"
+          autoFocus
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              submit();
+            }
+          }}
+        />
+      ) : (
+        <PinBoxes value={value} onChange={setValue} onEnter={submit} autoFocus label="Your PIN" />
+      )}
       {error && <div className="vault-prompt-error">{error}</div>}
-      <button type="button" className="vault-primary-btn" disabled={!value || submitting} onClick={submit}>
+      <button
+        type="button"
+        className="vault-primary-btn"
+        disabled={(method === "dpapi" ? !value : value.length !== PIN_LENGTH) || submitting}
+        onClick={submit}
+      >
         {submitting ? "Checking…" : "Unlock"}
       </button>
     </div>
