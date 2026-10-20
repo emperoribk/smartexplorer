@@ -53,7 +53,7 @@ export const PIN_LENGTH = 5;
 
 /** Five one-digit boxes for a PIN. Digits only; typing moves to the next
  *  box, Backspace steps back, pasting fills them all. The value is always
- *  a contiguous string (no gaps), so focus is kept on the first empty box. */
+ *  a contiguous string (no gaps). */
 export function PinBoxes({
   value,
   onChange,
@@ -80,6 +80,11 @@ export function PinBoxes({
     el?.focus();
     el?.select();
   };
+  // Move focus only AFTER React has applied the new value; focusing during
+  // the event handler runs against the old (stale) value.
+  const focusBoxSoon = (i: number) => {
+    window.setTimeout(() => focusBox(i), 0);
+  };
 
   return (
     <div className="pin-boxes" role="group" aria-label={label}>
@@ -97,18 +102,14 @@ export function PinBoxes({
           className={`pin-box${value[i] ? " pin-box-filled" : ""}`}
           aria-label={`${label}, digit ${i + 1} of ${PIN_LENGTH}`}
           value={value[i] ?? ""}
-          onFocus={(e) => {
-            // Never let focus land past the first empty box.
-            if (i > value.length) focusBox(value.length);
-            else e.currentTarget.select();
-          }}
+          onFocus={(e) => e.currentTarget.select()}
           onChange={(e) => {
             const digits = e.target.value.replace(/\D/g, "");
             if (!digits) return;
             const digit = digits[digits.length - 1];
             const next = (value.slice(0, i) + digit + value.slice(i + 1)).slice(0, PIN_LENGTH);
             onChange(next);
-            if (i < PIN_LENGTH - 1) focusBox(i + 1);
+            focusBoxSoon(Math.min(i + 1, next.length));
           }}
           onKeyDown={(e) => {
             if (e.key === "Backspace") {
@@ -117,7 +118,7 @@ export function PinBoxes({
                 onChange(value.slice(0, i) + value.slice(i + 1));
               } else if (i > 0) {
                 onChange(value.slice(0, i - 1) + value.slice(i));
-                focusBox(i - 1);
+                focusBoxSoon(i - 1);
               }
             } else if (e.key === "ArrowLeft") {
               e.preventDefault();
@@ -138,7 +139,7 @@ export function PinBoxes({
             const digits = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, PIN_LENGTH);
             if (!digits) return;
             onChange(digits);
-            focusBox(Math.min(digits.length, PIN_LENGTH - 1));
+            focusBoxSoon(Math.min(digits.length, PIN_LENGTH - 1));
           }}
         />
       ))}
