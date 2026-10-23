@@ -38,7 +38,9 @@ build later, since Electron and Python are both cross-platform.
   "Memories" reminders about folders you haven't touched in a while.
 - **Recycle Bin** (Windows): list what you deleted, restore it, or delete
   some or all of it permanently, always behind a confirmation.
-- **Your Eyes Only**: an encrypted vault for sensitive files. Only files you send there yourself are kept in it; nothing is moved automatically.
+- **Your Eyes Only**: an encrypted vault for sensitive files, protected by
+  your Windows password or a 5-digit PIN. Only files you send there yourself
+  are kept in it; nothing is moved automatically.
 - **Find duplicates** and a **storage** view of what is using disk space.
 - **Details panel**: select a file to see a preview, size, date and location,
   with a one-click **Smart name** suggestion for scanned documents and images.
@@ -59,8 +61,9 @@ Settings > Indexing). After that:
   something a photo shows, like "brown bag" or "dog on a beach".
 - **Press Space on a file** for an instant preview.
 - **Your Eyes Only**: send a file or folder there yourself and it is
-  encrypted. Opening it asks for your Windows password or PIN again, and
-  locked files and folders open inside the app.
+  encrypted. You protect it with your Windows password or a 5-digit PIN of
+  your own, and opening a locked file asks for it again. Locked files and
+  folders open inside the app.
 
 Windows shows a "Windows protected your PC" (SmartScreen) warning when you
 run the installer, because it isn't code-signed yet. Choose **More info**,
